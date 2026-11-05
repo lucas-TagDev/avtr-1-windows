@@ -5,17 +5,18 @@ import sys
 import time
 from pathlib import Path
 import httpx
+from windows_paths import voice_root
 
 root = Path(__file__).resolve().parents[1]
-for executable in (root / '.venv/Scripts/python.exe', root.parent / 'OmniVoice/.venv/Scripts/python.exe'):
+for executable in (root / '.venv/Scripts/python.exe', voice_root() / '.venv/Scripts/python.exe'):
     if not executable.is_file():
         raise SystemExit('Instalacao incompleta. Execute INSTALAR-WINDOWS.cmd e consulte WINDOWS.md.')
 env = os.environ.copy()
-env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", HF_HOME=str(root.parent / ".cache/huggingface"))
+env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", HF_HOME=str(root / ".cache/huggingface"))
 env.setdefault("AVTR1_ODE_STEPS", "3")
 if not (root / "artifacts/silero-vad/silero_vad.onnx").is_file():
     subprocess.run([sys.executable, str(root / "scripts/download_silero_vad.py")], cwd=root, env=env, check=True)
-voice = subprocess.Popen([str(root.parent / "OmniVoice/.venv/Scripts/python.exe"),
+voice = subprocess.Popen([str(voice_root() / ".venv/Scripts/python.exe"),
                           str(root / "scripts/omnivoice_live_service.py")], cwd=root, env=env)
 stream = None
 try:

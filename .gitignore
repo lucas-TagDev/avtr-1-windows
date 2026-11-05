@@ -80,3 +80,6 @@ settings.sqlite3*
 
 # Installer caches are kept on the selected disk
 .cache/
+
+# Local voice installation
+OmniVoice/

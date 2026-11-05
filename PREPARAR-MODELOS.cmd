@@ -10,7 +10,7 @@ for %%S in (prepare_warp_windows.py build_avtr1_engines.py build_hubert_engine.p
 if errorlevel 1 goto falha
 "%~dp0.venv-streamer\Scripts\python.exe" scripts\download_silero_vad.py
 if errorlevel 1 goto falha
-"%~dp0..\OmniVoice\.venv\Scripts\python.exe" scripts\download_voice_models.py
+"%~dp0OmniVoice\.venv\Scripts\python.exe" scripts\download_voice_models.py
 if errorlevel 1 goto falha
 echo Modelos preparados. Abra CONVERSAR-AO-VIVO.cmd.
 goto fim

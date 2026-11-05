@@ -10,7 +10,7 @@ Adaptação comunitária do [AVTR-1 original](https://github.com/avaturn-live/av
 - Silero VAD, diálogos laterais, janela flutuante, fotos como avatares personalizados.
 - Configurações persistidas em SQLite na pasta do projeto.
 
-Instalação: baixe o ZIP, extraia e abra **`INSTALAR-WINDOWS.cmd`**. Escolha uma pasta em qualquer disco; o instalador organiza a aplicação, voz e caches nesse destino.
+Instalação: baixe o ZIP, extraia e abra **`INSTALAR-WINDOWS.cmd`**. Coloque a pasta extraída no disco desejado e execute o instalador nela. A aplicação, o OmniVoice e os caches ficam dentro dessa mesma pasta, sem seleção de destino.
 
 Depois, entre no Hugging Face e execute `PREPARAR-MODELOS.cmd`, conforme o [guia Windows](WINDOWS.md).
 Uso diário: **`CONVERSAR-AO-VIVO.cmd`** → http://localhost:7860.

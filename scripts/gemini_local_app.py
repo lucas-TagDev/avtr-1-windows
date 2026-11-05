@@ -13,7 +13,8 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parents[1]
-OMNI = ROOT.parent / "OmniVoice"
+from windows_paths import voice_root
+OMNI = voice_root()
 OUTPUT = ROOT / "artifacts/conversations"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 app = FastAPI()
@@ -67,7 +68,7 @@ def status(job_id: str):
 async def process(command, folder, logname):
     env = os.environ.copy()
     env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8",
-               HF_HOME=str(ROOT.parent / ".cache/huggingface"))
+               HF_HOME=str(ROOT / ".cache/huggingface"))
     with (folder / logname).open("wb") as log:
         child = await asyncio.create_subprocess_exec(*map(str, command), cwd=ROOT,
                                                     env=env, stdout=log, stderr=log)

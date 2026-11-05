@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VOICE = ROOT.parent / "OmniVoice"
+VOICE = ROOT / "OmniVoice"
 VOICE_REVISION = "08be0b4ccbac3e13e374e86fbfead4b4cac343e2"
 
 def run(args, cwd=ROOT):

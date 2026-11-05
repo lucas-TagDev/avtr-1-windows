@@ -15,37 +15,32 @@ Não instale WSL. Os scripts usam Python, CUDA e TensorRT nativos do Windows. O 
 
 ## 2. Baixar e instalar
 
-Baixe o [ZIP deste projeto Windows](https://github.com/lucas-TagDev/avtr-1-windows/archive/refs/heads/main.zip) e extraia. Dê dois cliques em **INSTALAR-WINDOWS.cmd**.
+Baixe o [ZIP deste projeto Windows](https://github.com/lucas-TagDev/avtr-1-windows/archive/refs/heads/main.zip), extraia e coloque a pasta no disco desejado, por exemplo `D:\IA\Avatar`.
 
-Uma janela permite escolher a pasta em **qualquer disco local com espaço e permissão de escrita**, por exemplo `D:\IA` ou `G:\Aplicativos`. O instalador cria as pastas abaixo no destino escolhido e instala as dependências. Ao terminar, abre a pasta da aplicação no Explorador.
+Execute **INSTALAR-WINDOWS.cmd dentro dessa pasta**. Não aparece seleção de destino, nem é criada uma segunda cópia da aplicação. O local do instalador é o local da instalação, mesmo se você iniciar o arquivo por um terminal aberto em outra pasta.
 
 ```text
-D:\IA\                         # exemplo; você escolhe o disco e a pasta
-├── avtr-1-windows/
-│   ├── CONVERSAR-AO-VIVO.cmd
-│   ├── PREPARAR-MODELOS.cmd
-│   ├── .venv/
-│   ├── .venv-streamer/
-│   ├── .cache/               # downloads e arquivos temporários do instalador
-│   └── artifacts/            # modelos preparados depois
+D:\IA\Avatar\                 # a pasta em que está o instalador
+├── INSTALAR-WINDOWS.cmd
+├── CONVERSAR-AO-VIVO.cmd
+├── PREPARAR-MODELOS.cmd
+├── .venv/
+├── .venv-streamer/
+├── .cache/                   # pacotes, downloads e temporários
+├── artifacts/                # modelos, fotos e vozes
+├── settings.sqlite3          # criado ao usar a aplicação
 └── OmniVoice/
     ├── .venv/
     └── models/OmniVoice/
 ```
 
-**Use os iniciadores da pasta instalada**, e não os da pasta extraída do ZIP. O instalador copia somente os arquivos do pacote: fotos, vozes, banco de dados, modelos e ambientes pessoais da origem não são copiados. Uma repetição no mesmo destino atualiza os arquivos da aplicação sem apagar esses dados locais. Feche a aplicação antes de reinstalar.
+A instalação não copia fotos, vozes ou configurações para outra pasta. Execute os demais iniciadores nesse mesmo local. Feche a aplicação antes de repetir a instalação. Não mova a pasta depois de criar os ambientes Python: para mudar de disco, reinstale e restaure os seus dados pessoais.
 
-Git, Python, o driver NVIDIA e o Visual C++ são pré-requisitos do sistema e podem estar em outro disco. O Windows também pode usar espaço no disco do sistema. O instalador direciona seu cache de pacotes e arquivos temporários ao destino escolhido; os caches de execução ficam dentro da aplicação ou ao lado dela.
+Git, Python, driver NVIDIA e Visual C++ continuam sendo pré-requisitos do sistema. O instalador coloca seus ambientes, dependências, caches e temporários nesta pasta; o Windows e os pré-requisitos podem continuar usando o disco do sistema.
 
-Mantenha `avtr-1-windows` e `OmniVoice` juntas e não mova os ambientes depois de criados. Para mudar de disco, reinstale no novo destino e migre os seus dados conforme a seção de configurações.
+Instalações antigas com `OmniVoice` ao lado do projeto continuam sendo reconhecidas na execução, para não interromper uma instalação existente. O instalador novo sempre cria `OmniVoice` **dentro** do projeto. Não mova manualmente o ambiente antigo; reinstale se quiser adotar a nova estrutura.
 
-Se você cancelar a seleção de pasta, a instalação não começa. Se ocorrer erro, a janela permanece aberta: corrija a mensagem e execute novamente. A instalação completa em uma máquina limpa ainda precisa ser validada.
-
-Para escolher o destino pelo terminal, sem a janela de seleção:
-
-```powershell
-.\INSTALAR-WINDOWS.cmd --destination "D:\IA"
-```
+Se ocorrer erro, a janela permanece aberta: corrija a mensagem e execute novamente. A instalação completa em uma máquina limpa ainda precisa ser validada.
 
 ## 3. Entrar no Hugging Face e preparar os modelos
 
@@ -85,8 +80,8 @@ Voz de referência é opcional. Para clonar, envie uma gravação limpa da voz q
 | `artifacts/voices/` | Áudios de referência e informações das vozes |
 | `artifacts/main/` | Modelos e engines do renderizador |
 | `artifacts/silero-vad/` | Modelo VAD e licença |
-| `../OmniVoice/models/` | Modelo de síntese de voz |
-| `.cache/` e `../.cache/` | Caches de download |
+| `OmniVoice/models/` | Modelo de síntese de voz |
+| `.cache/` | Caches de download |
 
 Esses dados locais não são publicados no GitHub. Faça backup do banco, das vozes e dos avatares para migrar suas configurações, sem compartilhar suas chaves. O banco não contém os próprios arquivos de áudio ou imagem. A importação das configurações antigas do navegador ocorre uma única vez na primeira abertura com o banco novo.
 

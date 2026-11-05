@@ -6,10 +6,11 @@ from pathlib import Path
 import soundfile as sf
 import torch
 from omnivoice import OmniVoice
+from windows_paths import voice_root
 
 job = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 model = OmniVoice.from_pretrained(
-    str(Path(__file__).resolve().parents[2] / "OmniVoice/models/OmniVoice"),
+    str(voice_root() / "models/OmniVoice"),
     device_map="cuda:0", dtype=torch.float16,
 )
 kwargs = {"text": job["text"], "language": "Portuguese", "num_step": 16}
