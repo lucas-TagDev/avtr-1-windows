@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from windows_prerequisites import check
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -24,6 +25,8 @@ def main():
         raise SystemExit('Instale Python 3.12 para Windows com o Python Launcher.')
     if len(sys.argv) > 1:
         raise SystemExit('Coloque o projeto na pasta desejada e execute INSTALAR-WINDOWS.cmd nela. Nao ha selecao de destino.')
+    if not check(ROOT):
+        raise SystemExit('Corrija os itens FALTA e execute novamente. Nenhuma dependencia foi instalada.')
     print('Instalando nesta pasta:', ROOT, flush=True)
     subprocess.run([sys.executable, str(ROOT / 'scripts/install_windows.py')], cwd=ROOT,
                    env=installation_environment(ROOT), check=True)

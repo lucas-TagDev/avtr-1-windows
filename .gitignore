@@ -83,3 +83,5 @@ settings.sqlite3*
 
 # Local voice installation
 OmniVoice/
+
+models/

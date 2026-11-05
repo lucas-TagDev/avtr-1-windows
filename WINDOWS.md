@@ -13,6 +13,12 @@ Esta é uma adaptação comunitária do AVTR-1. O avatar é renderizado neste co
 
 Não instale WSL. Os scripts usam Python, CUDA e TensorRT nativos do Windows. O PyTorch instalado inclui as bibliotecas CUDA necessárias; o driver NVIDIA precisa ser compatível com CUDA 12.8.
 
+### Verificação automática
+
+Antes de baixar dependências, **INSTALAR-WINDOWS.cmd** verifica Windows x64, Python 3.12, Git, GPU NVIDIA, suporte do driver a CUDA 12.8+, Visual C++ x64, permissão de escrita e espaço livre. Exibe **OK**, **FALTA** ou **AVISO** para cada item. Se faltar um pré-requisito obrigatório, para e mostra como resolver, sem começar a instalação de dependências. Não reinstala automaticamente os pré-requisitos do sistema.
+
+Você também pode executar **VERIFICAR-REQUISITOS.cmd** para apenas consultar esse diagnóstico. A autorização no Hugging Face é uma etapa separada, necessária antes de preparar os modelos.
+
 ## 2. Baixar e instalar
 
 Baixe o [ZIP deste projeto Windows](https://github.com/lucas-TagDev/avtr-1-windows/archive/refs/heads/main.zip), extraia e coloque a pasta no disco desejado, por exemplo `D:\IA\Avatar`.
@@ -27,11 +33,17 @@ D:\IA\Avatar\                 # a pasta em que está o instalador
 ├── .venv/
 ├── .venv-streamer/
 ├── .cache/                   # pacotes, downloads e temporários
-├── artifacts/                # modelos, fotos e vozes
+├── models/                   # pesos separados do código
+│   ├── OmniVoice/
+│   └── whisper-base/
+├── artifacts/
+│   ├── main/                 # modelos e engines do avatar
+│   ├── silero-vad/           # modelo de detecção de fala
+│   ├── custom_avatars/       # fotos e templates personalizados
+│   └── voices/               # áudios de referência
 ├── settings.sqlite3          # criado ao usar a aplicação
-└── OmniVoice/
-    ├── .venv/
-    └── models/OmniVoice/
+└── OmniVoice/                # código do serviço de voz
+    └── .venv/                # dependências da voz
 ```
 
 A instalação não copia fotos, vozes ou configurações para outra pasta. Execute os demais iniciadores nesse mesmo local. Feche a aplicação antes de repetir a instalação. Não mova a pasta depois de criar os ambientes Python: para mudar de disco, reinstale e restaure os seus dados pessoais.
@@ -80,7 +92,9 @@ Voz de referência é opcional. Para clonar, envie uma gravação limpa da voz q
 | `artifacts/voices/` | Áudios de referência e informações das vozes |
 | `artifacts/main/` | Modelos e engines do renderizador |
 | `artifacts/silero-vad/` | Modelo VAD e licença |
-| `OmniVoice/models/` | Modelo de síntese de voz |
+| `models/OmniVoice/` | Pesos de síntese de voz |
+| `models/whisper-base/` | Pesos de reconhecimento de fala |
+| `OmniVoice/` | Código e ambiente do serviço de voz |
 | `.cache/` | Caches de download |
 
 Esses dados locais não são publicados no GitHub. Faça backup do banco, das vozes e dos avatares para migrar suas configurações, sem compartilhar suas chaves. O banco não contém os próprios arquivos de áudio ou imagem. A importação das configurações antigas do navegador ocorre uma única vez na primeira abertura com o banco novo.
@@ -91,6 +105,7 @@ Esses dados locais não são publicados no GitHub. Faça backup do banco, das vo
 
 | Arquivo | Finalidade |
 | --- | --- |
+| **VERIFICAR-REQUISITOS.cmd** | Diagnóstico do computador, sem instalar dependências |
 | **INSTALAR-WINDOWS.cmd** | Instalar dependências, antes do primeiro uso |
 | **PREPARAR-MODELOS.cmd** | Baixar modelos e compilar para sua GPU |
 | **CONVERSAR-AO-VIVO.cmd** | Uso diário: conversa com avatar e voz local |

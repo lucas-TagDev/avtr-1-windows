@@ -9,7 +9,7 @@ import numpy as np
 import soundfile as sf
 import torch
 from omnivoice import OmniVoice
-from windows_paths import voice_root, whisper_cache
+from windows_paths import voice_model, asr_model
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,9 +25,8 @@ lock = asyncio.Lock()
 @asynccontextmanager
 async def lifespan(app):
     global model
-    snapshots = whisper_cache() / "models--openai--whisper-base/snapshots"
-    asr = next((p for p in snapshots.glob("*") if (p / "model.safetensors").is_file()), None)
-    model = OmniVoice.from_pretrained(str(voice_root() / "models/OmniVoice"),
+    asr = asr_model()
+    model = OmniVoice.from_pretrained(str(voice_model()),
                                      device_map="cuda:0", dtype=torch.float16,
                                      asr_model_name=str(asr) if asr else "openai/whisper-base", asr_device="cpu", load_asr=True)
     yield

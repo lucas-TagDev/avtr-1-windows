@@ -17,3 +17,16 @@ def whisper_cache():
         return local
     legacy = ROOT.parent / '.cache/huggingface/hub'
     return legacy if (legacy / 'models--openai--whisper-base/snapshots').exists() else local
+
+
+def voice_model():
+    local = ROOT / 'models/OmniVoice'
+    legacy = voice_root() / 'models/OmniVoice'
+    return local if local.exists() or not legacy.exists() else legacy
+
+def asr_model():
+    local = ROOT / 'models/whisper-base'
+    if (local / 'config.json').is_file():
+        return local
+    snapshots = whisper_cache() / 'models--openai--whisper-base/snapshots'
+    return next((p for p in snapshots.glob('*') if (p / 'model.safetensors').is_file()), None)

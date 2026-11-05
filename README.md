@@ -12,6 +12,8 @@ Adaptação comunitária do [AVTR-1 original](https://github.com/avaturn-live/av
 
 Instalação: baixe o ZIP, extraia e abra **`INSTALAR-WINDOWS.cmd`**. Coloque a pasta extraída no disco desejado e execute o instalador nela. A aplicação, o OmniVoice e os caches ficam dentro dessa mesma pasta, sem seleção de destino.
 
+O instalador verifica os pré-requisitos antes de instalar e mostra o que falta. Para apenas verificar, abra **`VERIFICAR-REQUISITOS.cmd`**. Código de voz, modelos, caches e dados ficam em pastas separadas.
+
 Depois, entre no Hugging Face e execute `PREPARAR-MODELOS.cmd`, conforme o [guia Windows](WINDOWS.md).
 Uso diário: **`CONVERSAR-AO-VIVO.cmd`** → http://localhost:7860.
 
