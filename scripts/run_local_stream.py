@@ -53,8 +53,10 @@ def _start_renderer(port: int) -> subprocess.Popen[bytes]:
     # Disable the LB keep-alive worker -- there is no LB in the local setup.
     env.setdefault("LOAD_BALANCER_URL", "disabled")
     cmd = [
-        "pixi", "run", "-e", "default",
-        "python", "-m", "uvicorn",
+        *(
+            [str(Path(__file__).resolve().parent.parent / ".venv" / "Scripts" / "python.exe")]
+            if os.name == "nt" else ["pixi", "run", "-e", "renderer", "python"]
+        ), "-m", "uvicorn",
         "avtr1_renderer.api.app:app",
         "--host", "0.0.0.0",
         "--port", str(port),

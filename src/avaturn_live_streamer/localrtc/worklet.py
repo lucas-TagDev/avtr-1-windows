@@ -37,6 +37,7 @@ from avaturn_live_streamer.events import (
     VideoFrameGenerated,
 )
 from avaturn_live_streamer.localrtc.peer import LocalRTC
+from avaturn_live_streamer.conversation_status import playback
 from avaturn_live_streamer.types import PixelFormat
 from avaturn_live_streamer.utils.async_utils import cancel_and_wait_completion
 from avaturn_live_streamer.utils.exceptions import async_log_entry_exit
@@ -122,7 +123,11 @@ class LocalRTCWorklet:
 
                 await self._peer.push_video_frame(vframe)
                 if not frame.audio.is_empty:
+                    samples = np.frombuffer(frame.audio.to_bytes(), dtype="<i2")
+                    playback(bool(samples.size and np.max(np.abs(samples.astype(np.int32))) > 100))
                     await self._peer.push_audio_chunk(frame.audio)
+                else:
+                    playback(False)
 
                 n_frame += 1
 

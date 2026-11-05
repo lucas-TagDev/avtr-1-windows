@@ -107,8 +107,8 @@ class LocalRTC:
         self._connection_state: ConnectionState = "new"
         self._state_waiters: list[asyncio.Future[ConnectionState]] = []
 
-        pc.addTrack(self._video_track)
         pc.addTrack(self._audio_track)
+        pc.addTrack(self._video_track)
         pc.on("connectionstatechange", self._on_state_change)
         pc.on("track", self._on_track)
 

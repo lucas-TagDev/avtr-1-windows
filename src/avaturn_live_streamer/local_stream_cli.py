@@ -26,9 +26,10 @@ from typing import Annotated, Literal
 import httpx
 import typer
 import uvicorn
-from aiortc import RTCConfiguration, RTCPeerConnection, RTCSessionDescription
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from aiortc import RTCConfiguration, RTCBundlePolicy, RTCPeerConnection, RTCSessionDescription
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.responses import HTMLResponse, Response
+from avaturn_live_streamer.local_settings import SettingsStore
 from pydantic import BaseModel
 
 from avaturn_live_streamer.core.logs import get_logger, setup_logging
@@ -43,6 +44,7 @@ from avaturn_live_streamer.conversation_engines.builders import (
 )
 from avaturn_live_streamer.event_bus import EventBus
 from avaturn_live_streamer.events import Shutdown
+from avaturn_live_streamer.conversation_status import update as update_status, snapshot as status_snapshot
 from avaturn_live_streamer.localrtc import (
     LocalRTC,
     LocalRTCWorklet,
@@ -116,12 +118,15 @@ class _SessionSlot:
     def __init__(self) -> None:
         self._task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
+        self.last_error: str | None = None
+        self.preparing_avatar = False
 
     async def claim(self) -> None:
         async with self._lock:
             if self._task is not None and not self._task.done():
                 raise HTTPException(status_code=409, detail="Another session is active")
             self._task = None
+            self.last_error = None
 
     def attach(self, task: asyncio.Task[None]) -> None:
         self._task = task
@@ -134,6 +139,9 @@ class _SessionSlot:
             _LOGGER.info("local-stream session cancelled; slot free")
             return
         if (exc := task.exception()) is not None:
+            while isinstance(exc, BaseExceptionGroup) and exc.exceptions:
+                exc = exc.exceptions[0]
+            self.last_error = str(exc)
             _LOGGER.error("local-stream session failed; slot free", error=str(exc), exc_info=exc)
             return
         _LOGGER.info("local-stream session ended; slot free")
@@ -148,6 +156,10 @@ async def _run_session(
     idle_timeout: int,
     max_duration: int,
 ) -> None:
+    # Negotiate transport before constructing the bus: RTC may need more than
+    # the bus's five-second worker readiness deadline to finish ICE/DTLS.
+    update_status("connecting")
+    await peer.wait_connected(timeout=45.0)
     cfg = get_config()
     renderer_registry = create_renderer_client_registry(cfg.renderers)
     # Build the renderer config directly — the session/avatar DB is not vendored
@@ -190,6 +202,8 @@ async def _run_session(
             _emit_stop,
         )
     finally:
+        if status_snapshot()["phase"] != "error":
+            update_status("ended")
         await peer.close()
 
 
@@ -200,6 +214,27 @@ def _make_app(
 ) -> FastAPI:
     app = FastAPI()
     slot = _SessionSlot()
+    settings_store = SettingsStore()
+
+    @app.get('/settings')
+    async def read_settings():
+        return settings_store.read()
+
+    @app.post('/settings')
+    async def save_settings(values: dict):
+        try:
+            settings_store.update(values)
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+        return {'saved': True}
+
+    @app.get("/conversation-status")
+    async def conversation_status():
+        return status_snapshot()
+
+    @app.get("/session-error")
+    async def session_error():
+        return {"error": slot.last_error}
 
     @app.get("/", response_class=HTMLResponse)
     async def index() -> str:
@@ -229,6 +264,8 @@ def _make_app(
             result["error"] = f"renderer /avatars failed: {exc}"
             return result
         if isinstance(data, dict):
+            result["custom_avatars"] = data.get("custom_avatars", [])
+            result["avatar_names"] = data.get("avatar_names", {})
             avatars_list = data.get("avatars")
             if isinstance(avatars_list, list):
                 result["avatars"] = [str(a) for a in avatars_list]
@@ -236,6 +273,97 @@ def _make_app(
             if isinstance(backgrounds_list, list):
                 result["backgrounds"] = [str(b) for b in backgrounds_list]
         return result
+
+    @app.post("/provider-models")
+    async def provider_models(body: dict):
+        provider=str(body.get("provider","")); endpoint=str(body.get("endpoint","")); key=str(body.get("key",""))
+        if provider == "gemini":
+            url = "https://generativelanguage.googleapis.com/v1beta/models"
+            headers = {"x-goog-api-key": key} if key else {}
+        else:
+            url = endpoint.rstrip("/") + "/models" if endpoint else ""
+            headers = {"Authorization": f"Bearer {key}"} if key else {}
+        if not url:
+            raise HTTPException(400, "Informe o endpoint do provedor.")
+        try:
+            async with httpx.AsyncClient(timeout=15) as http:
+                r = await http.get(url, headers=headers)
+            if not r.is_success:
+                raise HTTPException(r.status_code, "O provedor nao retornou a lista de modelos.")
+            data = r.json()
+            models = [item.get("name", item.get("id", "")) for item in data.get("models", data.get("data", []))]
+            return {"models": [m for m in models if m]}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(502, f"Falha ao consultar modelos: {exc}") from exc
+
+    @app.get("/avatar-preview/{avatar_id}")
+    async def avatar_preview(avatar_id: str):
+        if not avatar_id or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for c in avatar_id):
+            raise HTTPException(404)
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(f"{_renderer_base_url()}/avatar-preview/{avatar_id}")
+        if not r.is_success:
+            raise HTTPException(r.status_code, "Previa indisponivel")
+        return Response(r.content, media_type=r.headers.get("content-type", "image/jpeg"),
+                        headers={"Cache-Control": "private, max-age=3600"})
+
+    @app.post("/custom-avatars")
+    async def custom_avatar(photo: UploadFile = File(...), name: str = Form(...)):
+        if slot.preparing_avatar or (slot._task is not None and not slot._task.done()):
+            raise HTTPException(409, "Encerre a chamada antes de adicionar um avatar.")
+        slot.preparing_avatar = True
+        try:
+            data = await photo.read(12 * 1024 * 1024 + 1)
+            if len(data) > 12 * 1024 * 1024:
+                raise HTTPException(413, "A foto deve ter ate 12 MB.")
+            async with httpx.AsyncClient(timeout=90) as client:
+                r = await client.post(f"{_renderer_base_url()}/custom-avatars", data={"name": name},
+                                      files={"photo": ("portrait", data, photo.content_type or "application/octet-stream")})
+            if not r.is_success:
+                raise HTTPException(r.status_code, r.json().get("detail", "Nao foi possivel preparar a foto."))
+            return r.json()
+        finally:
+            slot.preparing_avatar = False
+
+    @app.get('/voices')
+    async def voices_list():
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.get('http://127.0.0.1:7863/voices')
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as error:
+            raise HTTPException(502, 'Nao foi possivel consultar as vozes. Reinicie a aplicacao.') from error
+
+    @app.delete('/saved-assets/{kind}/{asset_id}')
+    async def delete_saved_asset(kind: str, asset_id: str):
+        if slot.preparing_avatar or (slot._task is not None and not slot._task.done()):
+            raise HTTPException(409, 'Encerre a chamada antes de excluir.')
+        import re
+        if kind == 'avatar' and re.fullmatch(r'custom_[0-9a-f]{32}', asset_id):
+            url = f'{_renderer_base_url()}/custom-avatars/{asset_id}'
+        elif kind == 'voice' and re.fullmatch(r'[0-9a-f]{32}', asset_id):
+            url = f'http://127.0.0.1:7863/voices/{asset_id}'
+        else:
+            raise HTTPException(400, 'Item personalizado invalido')
+        slot.preparing_avatar = True
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.delete(url)
+            if not response.is_success:
+                raise HTTPException(response.status_code, 'Nao foi possivel excluir o item.')
+            current = settings_store.read()
+            if kind == 'avatar' and current.get('avatar_id') == asset_id:
+                settings_store.update({'avatar_id': ''})
+            if kind == 'voice' and current.get('gemini_voice_id') == asset_id:
+                settings_store.update({key: '' for key in ('gemini_voice_id', 'gemini_voice_name', 'gemini_voice_fingerprint')})
+            return {'deleted': True}
+        except httpx.HTTPError as error:
+            raise HTTPException(502, 'Servico indisponivel. Reinicie a aplicacao.') from error
+        finally:
+            slot.preparing_avatar = False
 
     @app.get("/ice-servers")
     async def ice_servers_route() -> dict[str, object]:
@@ -291,12 +419,21 @@ def _make_app(
 
     @app.post("/offer")
     async def offer(body: _OfferBody) -> dict[str, str]:
+        if slot.preparing_avatar:
+            raise HTTPException(409, "Aguarde o avatar terminar de ser preparado.")
         await slot.claim()
 
         # Build the conversation engine up front (mints any tokens) so credential
         # / network errors surface as HTTP 4xx/5xx here instead of disappearing
         # into the fire-and-forget session task.
         try:
+            if body.avatar_id.startswith("custom_"):
+                if len(body.avatar_id) != 39 or any(c not in "0123456789abcdef" for c in body.avatar_id[7:]):
+                    raise HTTPException(400, "Avatar personalizado invalido")
+                async with httpx.AsyncClient(timeout=60) as client:
+                    r = await client.post(f"{_renderer_base_url()}/custom-avatars/{body.avatar_id}/activate")
+                    if not r.is_success:
+                        raise HTTPException(r.status_code, "Nao foi possivel carregar o avatar personalizado.")
             built_engine = await build_engine(body.engine, stream_id="local")
         except HTTPException:
             raise
@@ -305,7 +442,7 @@ def _make_app(
             raise HTTPException(status_code=400, detail=f"engine build failed: {exc}") from exc
 
         ice_servers = await resolve_ice_servers()
-        pc = RTCPeerConnection(configuration=RTCConfiguration(iceServers=ice_servers))
+        pc = RTCPeerConnection(configuration=RTCConfiguration(iceServers=ice_servers, bundlePolicy=RTCBundlePolicy.MAX_BUNDLE))
         peer = LocalRTC(pc)
 
         # Diagnostic: log the candidate types the browser actually sent us. If

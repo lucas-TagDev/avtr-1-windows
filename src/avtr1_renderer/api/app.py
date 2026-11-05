@@ -33,8 +33,9 @@ import anyio
 import numpy as np
 import uvicorn
 from anyio.streams.memory import MemoryObjectSendStream
-from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Query, Request, UploadFile, File, Form
+from fastapi.responses import StreamingResponse, FileResponse
+from avtr1_renderer import custom_avatars
 
 from avtr1_renderer.api.load_balancing import keep_alive_worker
 from avtr1_renderer.components.pixel_format import PixelFormat, get_bytes_per_frame
@@ -146,6 +147,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.pipeline = pipeline
     app.state.registry = registry
+    app.state.avatar_lock = asyncio.Lock()
     mg = pipeline._motion_generator
     app.state.current_samples = mg.chunk_size * mg.frame_len
     app.state.future_samples = mg.future_size * mg.frame_len + mg.audio_shift
@@ -155,6 +157,69 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+def _cache_custom(request, avatar):
+    registry = request.app.state.registry
+    for key in list(registry):
+        if custom_avatars.valid_id(key):
+            del registry[key]
+    registry[avatar.id] = avatar
+
+
+@app.post("/custom-avatars")
+async def create_custom_avatar(request: Request, photo: UploadFile = File(...), name: str = Form(...)):
+    data = await photo.read(12 * 1024 * 1024 + 1)
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(413, "A foto deve ter ate 12 MB.")
+    async with request.app.state.avatar_lock:
+        try:
+            item, avatar = await asyncio.to_thread(custom_avatars.register, data, name,
+                                                  request.app.state.pipeline.avatar_loader)
+        except (ValueError, RuntimeError) as exc:
+            detail = "Nao encontrei um rosto na foto. Use um rosto de frente, bem iluminado." if "No face" in str(exc) else str(exc)
+            raise HTTPException(400, detail) from exc
+        _cache_custom(request, avatar)
+        return item
+
+
+@app.post("/custom-avatars/{avatar_id}/activate")
+async def activate_custom_avatar(avatar_id: str, request: Request):
+    if not custom_avatars.valid_id(avatar_id) or not any(t["id"] == avatar_id for t in custom_avatars.templates()):
+        raise HTTPException(404, "Avatar personalizado nao encontrado.")
+    async with request.app.state.avatar_lock:
+        if avatar_id not in request.app.state.registry:
+            avatar = await asyncio.to_thread(request.app.state.pipeline.avatar_loader.load,
+                        custom_avatars.directory() / (avatar_id + ".png"), avatar_id=avatar_id)
+            _cache_custom(request, avatar)
+    return {"id": avatar_id, "ready": True}
+
+
+@app.delete('/custom-avatars/{avatar_id}')
+async def delete_custom_avatar(avatar_id: str, request: Request):
+    async with request.app.state.avatar_lock:
+        try:
+            custom_avatars.delete_template(avatar_id)
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+        except FileNotFoundError as error:
+            raise HTTPException(404, 'Avatar nao encontrado') from error
+        request.app.state.registry.pop(avatar_id, None)
+    return {'deleted': True}
+
+
+@app.get("/avatar-preview/{avatar_id}")
+def avatar_preview(avatar_id: str):
+    if custom_avatars.valid_id(avatar_id):
+        path = custom_avatars.directory() / (avatar_id + ".jpg")
+    else:
+        from avtr1_renderer.avtr1_artifact_manager import get_artifact_manager
+        if not avatar_id or Path(avatar_id).name != avatar_id or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for c in avatar_id):
+            raise HTTPException(404)
+        path = Path(get_artifact_manager().get_artifact_path("reference_frames")) / (avatar_id + ".png")
+    if not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path)
 
 
 @app.post("/process-audio-v3")
@@ -257,7 +322,7 @@ async def process_audio_v3(
 
 
 @app.get("/avatars")
-async def avatars(request: Request) -> dict[str, list[str]]:
+async def avatars(request: Request) -> dict[str, object]:
     """List the avatar ids and background ids loaded at startup (sorted).
 
     Backgrounds excludes the reserved ``transparent`` sentinel since callers
@@ -268,7 +333,9 @@ async def avatars(request: Request) -> dict[str, list[str]]:
     backgrounds: list[str] = []
     if pipeline is not None:
         backgrounds = sorted(b for b in pipeline._backgrounds if b != TRANSPARENT_BG_ID)
-    return {"avatars": sorted(registry), "backgrounds": backgrounds}
+    custom = custom_avatars.templates()
+    return {"avatars": sorted(set(registry) | {t["id"] for t in custom}), "backgrounds": backgrounds,
+            "custom_avatars": custom, "avatar_names": {t["id"]: t["name"] for t in custom}}
 
 
 @app.get("/health")

@@ -34,6 +34,10 @@ class CartesiaConversationEngineConfig(BaseModel):
     model_config = ConfigDict(title="CartesiaCEConfig")
 
 
+class GeminiLocalConversationEngineConfig(BaseModel):
+    type: Literal["gemini-local"] = "gemini-local"
+
+
 ConversationEngineConfig = (
-    OpenAIRealtimeAPIConversationEngineConfig | CartesiaConversationEngineConfig
+    OpenAIRealtimeAPIConversationEngineConfig | CartesiaConversationEngineConfig | GeminiLocalConversationEngineConfig
 )

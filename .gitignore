@@ -69,4 +69,11 @@ scripts/upload_to_hf.py
 # Misc
 .DS_Store
 *.log
+settings.sqlite3*
 *.tmp
+
+# Windows runtime, local exports and development captures
+.venv*/
+*.ppm
+*.tmp.*
+.tools/

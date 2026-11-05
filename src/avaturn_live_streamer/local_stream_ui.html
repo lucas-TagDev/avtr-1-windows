@@ -125,7 +125,7 @@
     }
     .modal-backdrop.open { display: flex; }
     .modal {
-      width: var(--modal-w, min(720px, 100%));
+      width: var(--modal-w, min(1180px, calc(100vw - 64px)));
       max-width: 100%;
       background: var(--panel);
       border: 1px solid var(--border);
@@ -133,7 +133,7 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      max-height: calc(100vh - 48px);
+      max-height: calc(100vh - 32px);
       transition: width 0.18s ease;
     }
     .modal-header {
@@ -181,6 +181,27 @@
     .ended-overlay .sub { font-size: 13px; color: var(--muted); max-width: 360px; }
     video { width: 100%; height: 100%; display: block; object-fit: contain; background: #000; }
     .modal-controls { margin-top: 14px; }
+    .meeting-layout { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:14px; align-items:stretch; min-height:520px; }
+    .dialog-panel { border:1px solid var(--border); border-radius:10px; background:#11161d; display:flex; flex-direction:column; min-height:220px; max-height:calc(100vh - 300px); overflow:hidden; }
+    .dialog-head { padding:12px 14px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:600; }
+    .dialog-list { padding:12px; overflow:auto; display:flex; flex-direction:column; gap:10px; flex:1; }
+    .dialog-bubble { padding:9px 11px; border-radius:10px; font-size:13px; line-height:1.4; white-space:pre-wrap; }
+    .dialog-bubble.avatar { background:#1e3a2e; align-self:stretch; }
+    .dialog-bubble.user { background:#273347; align-self:stretch; }
+    .dialog-empty { color:var(--muted); font-size:12px; padding:8px; }
+    .avatar-gallery { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:12px 0; }
+    .avatar-template { min-width:0; display:flex; flex-direction:column; gap:8px; }
+    .avatar-select { width:100%; flex:1; padding:6px; background:#1c2530; border:1px solid #46556b; border-radius:8px; color:var(--text); text-align:left; cursor:pointer; }
+    .avatar-select.selected { background:#254536; border-color:#70c69f; }
+    .avatar-select img { display:block; width:100%; height:100px; object-fit:contain; background:#0b1015; border-radius:5px; }
+    .avatar-select span { display:block; overflow-wrap:anywhere; padding:7px 2px 3px; line-height:1.35; }
+    .asset-delete { display:block; padding:9px 12px; border:1px solid #b75c65; border-radius:7px; background:#3b2028; color:#ffdce0; font:inherit; font-size:12px; cursor:pointer; }
+    .avatar-template .asset-delete { width:100%; }
+    .asset-delete:hover:not(:disabled) { background:#592a35; border-color:#ec929c; }
+    .asset-delete:disabled, .avatar-select:disabled { opacity:.55; cursor:not-allowed; }
+    .asset-delete:focus-visible, .avatar-select:focus-visible { outline:2px solid #93c5fd; outline-offset:2px; }
+    .dialog-toggle { margin-top:10px; align-self:flex-start; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:8px 12px; cursor:pointer; }
+    @media(max-width:800px){.meeting-layout{grid-template-columns:1fr}.dialog-panel{max-height:220px}}
 
     .mic-toggle-wrap {
       display: flex;
@@ -238,6 +259,7 @@
     .mic-toggle svg { width: 22px; height: 22px; }
 
     .probe { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); font-size: 13px; }
+    .provider-summary{margin:8px 0 16px;padding:11px 12px;border:1px solid #3d6657;border-radius:8px;background:#10251e;color:#d4f6e3;font-size:12px;line-height:1.5}
     .probe.warn { border-color: #b06b1c; background: #2a1f12; }
     .probe.bad { border-color: var(--danger); background: #2a1217; }
     .probe-title { font-weight: 600; margin-bottom: 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
@@ -283,6 +305,10 @@
   </style>
 </head>
 <body>
+  <div style="padding:12px;text-align:center;background:#152b25;color:#d8f7e8">
+    <a href="http://localhost:7860" style="color:#9df1c7">Conversa ao vivo: selecione Gemini + voz local abaixo</a>
+    <span style="font-size:12px"> · Inicie CONVERSAR-AO-VIVO.cmd se a página não abrir.</span>
+  </div>
   <div id="root"></div>
   <pre id="log" hidden></pre>
 
@@ -307,6 +333,7 @@
     };
 
     const ENGINE_TABS = [
+      { id: "gemini-local", label: "Gemini + voz local" },
       { id: "openai", label: "OpenAI Realtime" },
       { id: "cartesia", label: "Cartesia" },
     ];
@@ -337,15 +364,65 @@
       "You are a friendly, concise voice assistant. Speak naturally and keep " +
       "answers under 50 words. Avoid emojis or unreadable symbols.";
 
+    // SQLite is authoritative; browser storage is imported once for migration.
+    let settingsResponse;
+    try{
+      settingsResponse=await fetch('/settings',{cache:'no-store'});
+      if(!settingsResponse.ok)throw new Error('settings unavailable');
+    }catch(error){
+      document.getElementById('root').textContent='Não foi possível carregar as configurações. Reinicie pelo CONVERSAR-AO-VIVO.cmd e atualize esta página.';
+      throw error;
+    }
+    if(!settingsResponse.ok)throw new Error('Não foi possível carregar as configurações salvas.');
+    const savedSettings=await settingsResponse.json();
+    const pendingSettings={};
+    let saveTimer;
+    let savingSettings=false;
+    const saveNotice=document.createElement('div');
+    saveNotice.style.cssText='position:fixed;bottom:12px;left:12px;z-index:99999;padding:8px;background:#18252e;color:#fff;border-radius:6px';
+    saveNotice.setAttribute('role','status');
+    saveNotice.hidden=true;document.body.appendChild(saveNotice);
+    const flushSettings=async()=>{
+      if(savingSettings || !Object.keys(pendingSettings).length)return;
+      savingSettings=true;
+      const batch={...pendingSettings};
+      for(const key of Object.keys(batch))delete pendingSettings[key];
+      try{
+        const response=await fetch('/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(batch)});
+        if(!response.ok)throw new Error('save failed');
+        saveNotice.hidden=true;
+      }catch{
+        for(const [key,value] of Object.entries(batch))if(!(key in pendingSettings))pendingSettings[key]=value;
+        saveNotice.textContent='Não foi possível salvar. Tentando novamente…';saveNotice.hidden=false;
+      }finally{
+        savingSettings=false;
+        if(Object.keys(pendingSettings).length)saveTimer=setTimeout(flushSettings,1500);
+      }
+    };
+    const settingsStorage={
+      getItem:key=>savedSettings[key]??null,
+      setItem(key,value){value=String(value);if(savedSettings[key]===value)return;savedSettings[key]=value;pendingSettings[key]=value;clearTimeout(saveTimer);saveTimer=setTimeout(flushSettings,250)},
+      removeItem(key){delete savedSettings[key];pendingSettings[key]=null;clearTimeout(saveTimer);saveTimer=setTimeout(flushSettings,250)}
+    };
+    if(!savedSettings._browser_migrated){
+      const legacyKeys=['gemini_api_key','gemini_model','gemini_prompt','gemini_transcript','gemini_voice_name','gemini_voice_id','gemini_voice_fingerprint','text_provider','text_endpoint','transcription_provider','engine_live','avatar_id','background_id','openai_api_key','openai_model','openai_voice','openai_prompt','cartesia_api_key','cartesia_agent_id','mic_id'];
+      for(const key of legacyKeys){try{const value=localStorage.getItem(key);if(value!==null && savedSettings[key]===undefined)settingsStorage.setItem(key,value)}catch{}}
+      settingsStorage.setItem('_browser_migrated','1');
+      await flushSettings();
+    }
+    window.addEventListener('pagehide',()=>{
+      if(Object.keys(pendingSettings).length)navigator.sendBeacon('/settings',new Blob([JSON.stringify(pendingSettings)],{type:'application/json'}));
+    });
+
     function useLocalStorage(key, initial) {
       const [val, setVal] = useState(() => {
         try {
-          const v = localStorage.getItem(key);
+          const v = settingsStorage.getItem(key);
           return v === null ? initial : v;
         } catch { return initial; }
       });
       useEffect(() => {
-        try { localStorage.setItem(key, val ?? ""); } catch {}
+        try { settingsStorage.setItem(key, val ?? ""); } catch {}
       }, [key, val]);
       return [val, setVal];
     }
@@ -558,30 +635,18 @@
     }
 
     function useRendererRegistry() {
-      // /avatars returns both lists in one round-trip — the renderer loads
-      // both avatars and backgrounds at startup and surfaces them together.
-      const [state, setState] = useState({ status: "loading", avatars: [], backgrounds: [], error: null });
-      useEffect(() => {
-        let alive = true;
-        (async () => {
-          try {
-            const r = await fetch("/avatars");
-            if (!r.ok) throw new Error(`/avatars ${r.status}`);
-            const data = await r.json();
-            if (!alive) return;
-            setState({
-              status: data.error ? "error" : "ok",
-              avatars: Array.isArray(data.avatars) ? data.avatars : [],
-              backgrounds: Array.isArray(data.backgrounds) ? data.backgrounds : [],
-              error: data.error || null,
-            });
-          } catch (e) {
-            if (alive) setState({ status: "error", avatars: [], backgrounds: [], error: e.message || String(e) });
-          }
-        })();
-        return () => { alive = false; };
-      }, []);
-      return state;
+      const [state,setState]=useState({status:'loading',avatars:[],backgrounds:[],custom_avatars:[],avatar_names:{},error:null});
+      const refresh=useCallback(async()=>{
+        try{
+          const r=await fetch('/avatars',{cache:'no-store'});
+          if(!r.ok)throw Error('Nao foi possivel carregar os avatares');
+          const data=await r.json();
+          setState({status:data.error?'error':'ok',avatars:data.avatars||[],backgrounds:data.backgrounds||[],custom_avatars:data.custom_avatars||[],avatar_names:data.avatar_names||{},error:data.error||null});
+          return data;
+        }catch(e){setState(old=>({...old,status:'error',error:e.message}));throw e}
+      },[]);
+      useEffect(()=>{refresh().catch(()=>{})},[refresh]);
+      return {...state,refresh};
     }
 
     function useMics() {
@@ -689,6 +754,85 @@
       cartesiaKey, setCartesiaKey,
       cartesiaAgentId, setCartesiaAgentId,
     }) {
+      const [geminiKey,setGeminiKey]=useLocalStorage('gemini_api_key','');
+      const [geminiModel,setGeminiModel]=useLocalStorage('gemini_model','gemini-3.8-flash');
+      const [geminiPrompt,setGeminiPrompt]=useLocalStorage('gemini_prompt','Responda em portugues brasileiro em ate duas frases curtas, sem markdown.');
+      const [geminiTranscript,setGeminiTranscript]=useLocalStorage('gemini_transcript','');
+      const [savedVoice,setSavedVoice]=useLocalStorage('gemini_voice_name','');
+      const [storedTextProvider,setStoredTextProvider]=useLocalStorage('text_provider','gemini');
+      const textProvider=storedTextProvider==='openai-compatible'?'openai':(providerDefaultsSafe(storedTextProvider)?storedTextProvider:'gemini');
+      const setTextProvider=(v)=>setStoredTextProvider(v);
+      const [transcriptionProvider,setTranscriptionProvider]=useLocalStorage('transcription_provider','local');
+      const persist=(key,setter)=>(e)=>{try{settingsStorage.setItem(key,e.target.value)}catch{}setter(e.target.value)};
+      const providerDefaults={gemini:{label:'Google Gemini',endpoint:'',model:'gemini-3.8-flash',keyLabel:'Chave Gemini'},openai:{label:'OpenAI',endpoint:'https://api.openai.com/v1',model:'gpt-4o-mini',keyLabel:'Chave OpenAI'},deepseek:{label:'DeepSeek',endpoint:'https://api.deepseek.com/v1',model:'deepseek-chat',keyLabel:'Chave DeepSeek'},grok:{label:'Grok / xAI',endpoint:'https://api.x.ai/v1',model:'grok-3-mini',keyLabel:'Chave Grok'},lmstudio:{label:'LM Studio local',endpoint:'http://localhost:1234/v1',model:'local-model',keyLabel:'Chave (opcional)'}};
+      function providerDefaultsSafe(v){return ['gemini','openai','deepseek','grok','lmstudio'].includes(v)}
+      const [textEndpoint,setTextEndpoint]=useLocalStorage('text_endpoint','');
+      const [textApiKey,setTextApiKey]=useLocalStorage('text_api_key','');
+      const [transcriptionKey,setTranscriptionKey]=useLocalStorage('transcription_api_key','');
+      const changeProvider=(e)=>{
+        const v=e.target.value;
+        settingsStorage.setItem('provider_'+textProvider+'_model',geminiModel);
+        settingsStorage.setItem('provider_'+textProvider+'_endpoint',textEndpoint);
+        settingsStorage.setItem('provider_'+textProvider+'_key',textApiKey);
+        const model=settingsStorage.getItem('provider_'+v+'_model')||providerDefaults[v].model;
+        const endpoint=settingsStorage.getItem('provider_'+v+'_endpoint')||providerDefaults[v].endpoint;
+        const key=settingsStorage.getItem('provider_'+v+'_key')||'';
+        setTextProvider(v);setGeminiModel(model);setTextEndpoint(endpoint);setTextApiKey(key);
+        settingsStorage.setItem('text_provider',v);settingsStorage.setItem('gemini_model',model);
+        settingsStorage.setItem('text_endpoint',endpoint);settingsStorage.setItem('text_api_key',key);
+        setAvailableModels([]);setModelMessage('');
+      };
+      const [savedVoices,setSavedVoices]=useState([]);
+      const refreshVoices=async()=>{try{const r=await fetch('/voices');if(r.ok)setSavedVoices((await r.json()).voices||[])}catch{}};
+      useEffect(()=>{refreshVoices()},[savedVoice]);
+      const deleteAsset=async(kind,id,name)=>{
+        if(!window.confirm(`Excluir ${name}? Os arquivos salvos deste item serão apagados.`))return;
+        setTemplateBusy(true);setTemplateMessage('');
+        try{
+          const r=await fetch('/saved-assets/'+kind+'/'+encodeURIComponent(id),{method:'DELETE'});
+          const data=await r.json();if(!r.ok)throw Error(data.detail||'Não foi possível excluir.');
+          if(kind==='avatar'){
+            if(avatarId===id)setAvatarId('');
+            await registry.refresh();
+          }else{
+            if(settingsStorage.getItem('gemini_voice_id')===id){
+              for(const key of ['gemini_voice_id','gemini_voice_name','gemini_voice_fingerprint'])settingsStorage.removeItem(key);
+              setSavedVoice('');
+              const input=document.getElementById('gemini-live-reference');if(input)input.value='';
+            }
+            await refreshVoices();
+          }
+          setTemplateMessage('Item excluído.');
+        }catch(e){setTemplateMessage(e.message)}finally{setTemplateBusy(false)}
+      };
+      const [templateName,setTemplateName]=useState('');
+      const [templateFile,setTemplateFile]=useState(null);
+      const [templatePreview,setTemplatePreview]=useState('');
+      const [templateBusy,setTemplateBusy]=useState(false);
+      const [templateMessage,setTemplateMessage]=useState('');
+      const [modelMessage,setModelMessage]=useState('');
+      const [availableModels,setAvailableModels]=useState([]);
+      const loadModels=async()=>{setModelMessage('Consultando…');try{const provider=textProvider==='gemini'?'gemini':'openai';const endpoint=document.getElementById('gemini-live-endpoint')?.value||'';const key=provider==='gemini'?geminiKey:(document.getElementById('gemini-live-text-key')?.value||'');const r=await fetch('/provider-models',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({provider,endpoint,key})});const d=await r.json();if(!r.ok)throw Error(d.detail||'Falha ao consultar modelos');setAvailableModels(d.models||[]);setModelMessage(`${(d.models||[]).length} modelos encontrados`)}catch(e){setModelMessage(e.message)}};
+      useEffect(()=>{
+        if(!templateFile){setTemplatePreview('');return}
+        const url=URL.createObjectURL(templateFile);setTemplatePreview(url);
+        return()=>URL.revokeObjectURL(url);
+      },[templateFile]);
+      const saveTemplate=async()=>{
+        setTemplateMessage('');
+        if(!templateFile||!templateName.trim()){setTemplateMessage('Escolha uma foto e um nome para o avatar.');return}
+        if(templateFile.size>12*1024*1024){setTemplateMessage('A foto deve ter ate 12 MB.');return}
+        setTemplateBusy(true);
+        try{
+          const form=new FormData();form.append('photo',templateFile);form.append('name',templateName.trim());
+          const r=await fetch('/custom-avatars',{method:'POST',body:form});const data=await r.json();
+          if(!r.ok)throw Error(data.detail||'Nao foi possivel salvar o avatar.');
+          await registry.refresh();setAvatarId(data.id);
+          setTemplateName('');setTemplateFile(null);
+          const input=document.getElementById('custom-avatar-photo');if(input)input.value='';
+          setTemplateMessage('Avatar salvo e selecionado. Voce pode iniciar a chamada.');
+        }catch(e){setTemplateMessage(e.message)}finally{setTemplateBusy(false)}
+      };
       const avatarOptions = registry.avatars || [];
       const backgroundOptions = registry.backgrounds || [];
       const registryHint = registry.status === "loading"
@@ -705,10 +849,25 @@
                     disabled=${avatarOptions.length === 0}>
               ${avatarOptions.length === 0
                 ? html`<option value="">(none loaded)</option>`
-                : avatarOptions.map((a) => html`<option value=${a}>${a}</option>`)}
+                : avatarOptions.map((a) => html`<option value=${a}>${registry.avatar_names?.[a] || a}</option>`)}
             </select>
           </div>
 
+          ${avatarId ? html`<img src=${'/avatar-preview/'+encodeURIComponent(avatarId)} alt="Previa do avatar selecionado" style="width:100%;max-height:180px;object-fit:contain;border-radius:8px;background:#0b1015;margin-bottom:12px" />` : null}
+          <details class="personal-avatars" style="margin:10px 0 18px;border:1px solid #344051;border-radius:8px;padding:12px">
+            <summary style="cursor:pointer">Meus avatares · ${(registry.custom_avatars||[]).length} ${(registry.custom_avatars||[]).length===1?'salvo':'salvos'}</summary>
+            <p class="hint">Envie uma foto com um rosto visivel. Os templates ficam salvos somente nesta maquina e aparecem nas proximas chamadas.</p>
+            ${(registry.custom_avatars||[]).length ? html`<div class="avatar-gallery">
+              ${registry.custom_avatars.map(t=>html`<div class="avatar-template"><button type="button" class=${"avatar-select"+(avatarId===t.id?" selected":"")} aria-pressed=${avatarId===t.id} disabled=${disabled||templateBusy} onClick=${()=>setAvatarId(t.id)}>
+                <img src=${'/avatar-preview/'+t.id} alt=${t.name} /><span>${t.name}</span>
+              </button><button type="button" class="asset-delete" disabled=${disabled||templateBusy} onClick=${()=>deleteAsset('avatar',t.id,t.name)}>Excluir avatar</button></div>`)}
+            </div>` : html`<p class="hint">Nenhum avatar personalizado salvo ainda.</p>`}
+            <label for="custom-avatar-name">Nome do template</label><input id="custom-avatar-name" maxlength="80" value=${templateName} onInput=${e=>setTemplateName(e.target.value)} placeholder="Ex.: Meu avatar" disabled=${disabled||templateBusy} />
+            <label for="custom-avatar-photo" style="margin-top:10px">Sua foto (JPG, PNG ou WebP)</label><input id="custom-avatar-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange=${e=>setTemplateFile(e.target.files[0]||null)} disabled=${disabled||templateBusy} />
+            ${templatePreview ? html`<img src=${templatePreview} alt="Foto escolhida para o novo avatar" style="width:100%;max-height:180px;object-fit:contain;margin-top:10px" />` : null}
+            <button type="button" class="btn" style="margin-top:12px" disabled=${disabled||templateBusy} onClick=${saveTemplate}>${templateBusy?'Preparando a foto…':'Salvar avatar'}</button>
+            <div class="hint" role="status" aria-live="polite" style="margin-top:8px">${templateMessage}</div>
+          </details>
           <div class="field">
             <label for="background">Background</label>
             <select id="background" value=${backgroundId}
@@ -731,6 +890,25 @@
             `)}
           </div>
 
+          ${engine === "gemini-local" ? html`
+            <div class="engine-panel">
+              <div class="provider-summary"><strong>Fluxo atual</strong><br/>${textProvider==='gemini'?'Gemini':'LLM compatível'} → ${transcriptionProvider==='local'?'Whisper local':'OpenAI Whisper'} → OmniVoice local → AVTR-1 local</div>
+              <label>Provedor de texto</label><select id="gemini-live-provider" value=${textProvider} onChange=${changeProvider}><option value="gemini">Google Gemini</option><option value="openai">OpenAI</option><option value="deepseek">DeepSeek</option><option value="grok">Grok / xAI</option><option value="lmstudio">LM Studio local</option></select>
+              ${textProvider==='gemini' ? html`<div><label>Chave Gemini</label><input id="gemini-live-key" type="password" autoComplete="off" value=${geminiKey} onInput=${persist("gemini_api_key",setGeminiKey)} /></div>` : html`<div><label>Endpoint padrão</label><input id="gemini-live-endpoint" value=${textEndpoint||providerDefaults[textProvider].endpoint} onInput=${persist('text_endpoint',setTextEndpoint)} /><label>${providerDefaults[textProvider].keyLabel}</label><input id="gemini-live-text-key" type="password" value=${textApiKey} onInput=${persist('text_api_key',setTextApiKey)} /></div>`}
+              <label>Modelo</label><div style="display:flex;gap:8px"><input id="gemini-live-model" list="provider-model-list" value=${geminiModel} onInput=${persist("gemini_model",setGeminiModel)} /><button type="button" class="btn" onClick=${loadModels}>Ver modelos</button></div><datalist id="provider-model-list">${availableModels.map(m=>html`<option value=${m}></option>`)}</datalist><div class="hint">${modelMessage}</div>
+              <label>Como responder</label><textarea id="gemini-live-prompt" rows="3" value=${geminiPrompt} onInput=${persist("gemini_prompt",setGeminiPrompt)} />
+              <label>Quem transforma sua fala em texto?</label><select id="gemini-live-transcription" value=${transcriptionProvider} onChange=${persist('transcription_provider',setTranscriptionProvider)}><option value="local">Whisper local (privado)</option><option value="openai">OpenAI Whisper API</option></select>
+              ${transcriptionProvider==='openai' ? html`<div><label>Chave OpenAI Whisper</label><input id="gemini-live-transcription-key" type="password" value=${transcriptionKey} onInput=${persist('transcription_api_key',setTranscriptionKey)} /></div>` : html`<div class="hint">Sua fala fica nesta máquina para a transcrição.</div>`}
+              <label>Voz de referencia (opcional)</label><input id="gemini-live-reference" type="file" accept=".wav,.mp3,.flac,.ogg" />
+              <label>Transcricao (opcional)</label><textarea id="gemini-live-transcript" rows="2" value=${geminiTranscript} onInput=${persist("gemini_transcript",setGeminiTranscript)} placeholder="Deixe vazio para reconhecer a fala localmente" />
+              ${savedVoice ? html`<div class="hint">Voz salva: ${savedVoice}. Nao e necessario selecionar o arquivo novamente.</div><button type="button" onClick=${()=>{settingsStorage.removeItem('gemini_voice_id');settingsStorage.removeItem('gemini_voice_fingerprint');setSavedVoice('')}}>Usar voz automatica</button>` : null}
+              <details><summary onClick=${refreshVoices}>Vozes e áudios salvos</summary>
+                ${savedVoices.length ? savedVoices.map(v=>html`<div style="display:flex;justify-content:space-between;gap:8px;margin:8px 0"><span>${settingsStorage.getItem('gemini_voice_id')===v.id ? savedVoice||v.name : 'Voz '+v.name}</span><button type="button" class="asset-delete" disabled=${disabled||templateBusy} onClick=${()=>deleteAsset('voice',v.id,'a voz e seu áudio de referência')}>Excluir voz e áudio</button></div>`) : html`<p class="hint">Nenhuma voz salva disponível.</p>`}
+              </details>
+              <div class="hint">Configurações e chaves salvas neste computador, no banco SQLite da pasta do projeto.</div>
+              <div class="hint">A voz e o avatar rodam nesta maquina. Inicie CONVERSAR-AO-VIVO.cmd antes de conectar. O microfone permanece ligado durante a chamada. Sua fala e enviada ao Gemini para gerar o texto; o audio de clonagem permanece local.</div>
+            </div>
+          ` : null}
           ${engine === "openai" ? html`
             <div class="engine-panel">
               <div class="field">
@@ -738,7 +916,7 @@
                 <input id="openai-key" type="password" value=${openaiKey}
                        onInput=${(e) => setOpenaiKey(e.target.value)}
                        placeholder="sk-..." autocomplete="off" />
-                <div class="hint">Stored in your browser's localStorage. Used server-side to mint an ephemeral realtime token per session. <a href="https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key" target="_blank" rel="noopener">Where do I find this?</a></div>
+                <div class="hint">Stored in your browser's settingsStorage. Used server-side to mint an ephemeral realtime token per session. <a href="https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key" target="_blank" rel="noopener">Where do I find this?</a></div>
               </div>
               <div class="field">
                 <label for="openai-model">Model</label>
@@ -770,7 +948,7 @@
                 <input id="cartesia-key" type="password" value=${cartesiaKey}
                        onInput=${(e) => setCartesiaKey(e.target.value)}
                        placeholder="sk_..." autocomplete="off" />
-                <div class="hint">Stored in localStorage. Used server-side to mint a short-lived access token per session. <a href="https://play.cartesia.ai/keys" target="_blank" rel="noopener">Where do I find this?</a></div>
+                <div class="hint">Stored in settingsStorage. Used server-side to mint a short-lived access token per session. <a href="https://play.cartesia.ai/keys" target="_blank" rel="noopener">Where do I find this?</a></div>
               </div>
               <div class="field">
                 <label for="cartesia-agent">Agent ID</label>
@@ -792,13 +970,56 @@
           ${error ? html`<div class="error-box">${error}</div>` : null}
 
           <div class="actions">
-            <button class="btn" disabled=${disabled} onClick=${onStart}>Start session</button>
+            <button class="btn" disabled=${disabled||templateBusy} onClick=${onStart}>Start session</button>
           </div>
         </div>
       `;
     }
 
     function SessionModal({ open, status, micId, mics, onChangeMic, onClose, videoRef, audioRef, audioTrack, muted, onToggleMute }) {
+      const [progress,setProgress]=useState(null);
+      const [showDialog,setShowDialog]=useState(true);
+      const [detachedError,setDetachedError]=useState('');
+      const detachedRef=useRef(null);
+      const openAvatarWindow=async()=>{
+        const video=videoRef.current;
+        setDetachedError('');
+        if(!video || video.readyState<2){setDetachedError('Aguarde o vídeo do avatar carregar.');return;}
+        try{
+          if(document.pictureInPictureEnabled && video.requestPictureInPicture){
+            if(document.pictureInPictureElement===video)await document.exitPictureInPicture();
+            else await video.requestPictureInPicture();
+            return;
+          }
+          if(detachedRef.current && !detachedRef.current.closed){detachedRef.current.focus();return;}
+          const popup=window.open('','avatar-video','popup=yes,width=960,height=540,resizable=yes');
+          if(!popup)throw new Error('Permita abrir janelas nesta página e tente novamente.');
+          detachedRef.current=popup;
+          popup.document.title='Avatar — conversa ao vivo';
+          popup.document.body.style.cssText='margin:0;background:#000;overflow:hidden;height:100vh';
+          const mirror=popup.document.createElement('video');
+          mirror.autoplay=true;mirror.muted=true;mirror.playsInline=true;
+          mirror.style.cssText='width:100%;height:100%;object-fit:contain';
+          mirror.srcObject=video.srcObject;
+          popup.document.body.replaceChildren(mirror);
+          await mirror.play();
+        }catch(error){setDetachedError(error.message || 'Não foi possível abrir o vídeo separado.');}
+      };
+      useEffect(()=>{
+        if(!open)return;
+        return()=>{
+          if(detachedRef.current && !detachedRef.current.closed)detachedRef.current.close();
+          detachedRef.current=null;
+          if(document.pictureInPictureElement===videoRef.current)document.exitPictureInPicture().catch(()=>{});
+        };
+      },[open]);
+      useEffect(()=>{
+        if(!open)return;
+        let stopped=false;
+        const poll=async()=>{try{const r=await fetch('/conversation-status',{cache:'no-store'});if(r.ok&&!stopped)setProgress(await r.json())}catch{}};
+        poll();const timer=setInterval(poll,500);
+        return()=>{stopped=true;clearInterval(timer)};
+      },[open]);
       const wrapRef = useRef(null);
       const modalRef = useRef(null);
       useEffect(() => {
@@ -826,7 +1047,7 @@
           const maxVideoH = Math.max(240, window.innerHeight - padY - chrome);
           const ar = v.videoWidth / v.videoHeight;
           const widthByHeight = maxVideoH * ar;
-          const targetW = Math.min(v.videoWidth, maxW, widthByHeight);
+          const targetW = Math.min(Math.max(v.videoWidth + 354, 980), maxW, widthByHeight + 354);
           modal.style.setProperty("--modal-w", Math.round(targetW) + "px");
         };
         const onResize = () => apply();
@@ -854,15 +1075,26 @@
               <button class="icon-btn" title="End session" onClick=${onClose}>×</button>
             </div>
             <div class="modal-body">
+              <div class="meeting-layout">
               <div class="video-wrap" ref=${wrapRef}>
                 <video ref=${videoRef} autoplay playsinline></video>
                 <audio ref=${audioRef} autoplay></audio>
                 ${status === "ended" ? html`
                   <div class="ended-overlay">
                     <div class="title">Session timed out</div>
-                    <div class="sub">The server ended this session (timeout or shutdown). Close this window and start a new session.</div>
+                    <div class="sub" id="ended-reason">A sessao foi encerrada. Consultando o motivo...</div>
                   </div>
                 ` : null}
+              </div>
+              ${showDialog ? html`<aside class="dialog-panel"><div class="dialog-head"><span>Diálogo</span><button class="icon-btn" title="Esconder diálogo" onClick=${()=>setShowDialog(false)}>×</button></div><div class="dialog-list">${progress?.transcript?.length ? progress.transcript.map(item=>html`<div class=${"dialog-bubble "+item.role}><strong>${item.role==='avatar'?'Avatar':'Você'}:</strong> ${item.text}</div>`) : html`<div class="dialog-empty">As falas aparecerão aqui durante a conversa.</div>`}</div></aside>` : null}
+              </div>
+              ${!showDialog ? html`<button class="dialog-toggle" onClick=${()=>setShowDialog(true)}>Mostrar diálogo</button>` : null}
+              <button class="dialog-toggle" disabled=${status!=='live'} onClick=${openAvatarWindow} title="Abrir somente o vídeo do avatar em uma janela flutuante">Abrir avatar em janela separada</button>
+              ${detachedError ? html`<div role="alert">${detachedError}</div>` : null}
+              <div class="conversation-progress" role="status" aria-live="polite" style="padding:12px 14px;margin-top:12px;border:1px solid #36584d;border-radius:8px;background:#12251e;color:#c9f4df">
+                <strong>${status === 'connecting' ? 'Conectando áudio e vídeo…' : progress?.detail || progress?.label || 'Aguardando…'}</strong>
+                ${progress?.elapsed >= 1 && !['listening','ended'].includes(progress.phase) ? html`<span style="margin-left:8px;opacity:.7">${Math.floor(progress.elapsed)} s</span>` : null}
+                ${progress?.detail ? html`<div style="margin-top:5px;color:#ffb3b3">${progress.detail}</div>` : null}
               </div>
               <div class="modal-controls">
                 <div class="mic-row">
@@ -899,7 +1131,7 @@
       const mics = useMics();
       const probe = useConnectivityProbe();
       const registry = useRendererRegistry();
-      const [engine, setEngine] = useLocalStorage("engine", "openai");
+      const [engine, setEngine] = useLocalStorage("engine_live", "gemini-local");
       const [avatarId, setAvatarId] = useLocalStorage("avatar_id", "");
       const [backgroundId, setBackgroundId] = useLocalStorage("background_id", "");
       const [openaiKey, setOpenaiKey] = useLocalStorage("openai_api_key", "");
@@ -908,9 +1140,16 @@
       const [openaiPrompt, setOpenaiPrompt] = useLocalStorage("openai_prompt", DEFAULT_OPENAI_PROMPT);
       const [cartesiaKey, setCartesiaKey] = useLocalStorage("cartesia_api_key", "");
       const [cartesiaAgentId, setCartesiaAgentId] = useLocalStorage("cartesia_agent_id", "");
-      const [micId, setMicId] = useState("");
+      const [micId, setMicId] = useLocalStorage("mic_id", "");
       const [open, setOpen] = useState(false);
       const [status, setStatus] = useState("connecting");
+      useEffect(() => {
+        if (status !== 'ended') return;
+        fetch('/session-error').then(r=>r.json()).then(data=>{
+          const target=document.getElementById('ended-reason');
+          if(target)target.textContent=data.error || 'A conexao foi encerrada. Feche esta janela e conecte novamente.';
+        }).catch(()=>{});
+      },[status]);
       const [audioTrack, setAudioTrack] = useState(null);
       const [active, setActive] = useState(false);
       const [muted, setMuted] = useState(false);
@@ -979,7 +1218,40 @@
         });
       }, [teardown]);
 
-      const buildEngineConfig = useCallback(() => {
+      const buildEngineConfig = useCallback(async () => {
+
+        if (engine === "gemini-local") {
+          const keys={'gemini-live-key':'gemini_api_key','gemini-live-model':'gemini_model','gemini-live-prompt':'gemini_prompt','gemini-live-transcript':'gemini_transcript'};
+          const value = id => settingsStorage.getItem(keys[id]) || document.getElementById(id)?.value || '';
+          const api_key = value('gemini-live-key').trim();
+          const selectedProvider=document.getElementById('gemini-live-provider')?.value||'gemini';
+          if (selectedProvider==='gemini'&&!api_key) throw Error('Informe a chave Gemini');
+          let voice_id = settingsStorage.getItem('gemini_voice_id') || '';
+          const file = document.getElementById('gemini-live-reference')?.files[0];
+          if (file) {
+            const transcript = value('gemini-live-transcript').trim();
+            const fingerprint=[file.name,file.size,file.lastModified,transcript].join(':');
+            if(fingerprint !== settingsStorage.getItem('gemini_voice_fingerprint') || !voice_id){
+            const form = new FormData(); form.append('audio',file);form.append('transcript',transcript);
+            const response = await fetch('http://127.0.0.1:7863/reference',{method:'POST',body:form});
+            const result = await response.json();
+            if (!response.ok) throw Error(result.detail || 'Falha ao preparar a voz local');
+            voice_id = result.voice_id;
+            settingsStorage.setItem('gemini_voice_id',voice_id);
+            settingsStorage.setItem('gemini_voice_name',file.name);
+            settingsStorage.setItem('gemini_voice_fingerprint',fingerprint);
+            }
+          }
+          const selected=document.getElementById('gemini-live-provider')?.value||'gemini';
+          const provider=selected==='gemini'?'gemini':'openai-compatible';
+          const transcription=document.getElementById('gemini-live-transcription')?.value||'local';
+          const textKey=(document.getElementById('gemini-live-text-key')?.value||'').trim();
+          const transKey=(document.getElementById('gemini-live-transcription-key')?.value||'').trim();
+          if(provider==='openai-compatible'&&!value('gemini-live-endpoint').trim())throw Error('Informe o endpoint OpenAI-compatible');
+          if(transcription==='openai'&&!transKey)throw Error('Informe a chave para OpenAI Whisper');
+          return {type:'gemini-local',api_key,voice_id,model:value('gemini-live-model').trim(),prompt:value('gemini-live-prompt'),text_provider:provider,text_endpoint:value('gemini-live-endpoint').trim(),text_api_key:textKey,transcription_provider:transcription,transcription_api_key:transKey};
+        }
+
         if (engine === "openai") {
           const apiKey = (openaiKey || "").trim();
           if (!apiKey) throw new Error("OpenAI API key is required");
@@ -1006,7 +1278,7 @@
         setStartError(null);
         let engineConfig;
         try {
-          engineConfig = buildEngineConfig();
+          engineConfig = await buildEngineConfig();
         } catch (e) {
           setStartError(e.message || String(e));
           return;
@@ -1025,13 +1297,14 @@
           const pc = new RTCPeerConnection({
             iceServers: iceCfg.iceServers || [],
             iceTransportPolicy: iceCfg.iceTransportPolicy || "all",
+            bundlePolicy: "max-bundle",
           });
           pcRef.current = pc;
 
           pc.ontrack = (ev) => {
             log("ontrack", ev.track.kind);
-            if (ev.track.kind === "video" && videoRef.current) videoRef.current.srcObject = ev.streams[0];
-            else if (ev.track.kind === "audio" && audioRef.current) audioRef.current.srcObject = ev.streams[0];
+            if (ev.track.kind === "video" && videoRef.current) videoRef.current.srcObject = ev.streams[0] || new MediaStream([ev.track]);
+            else if (ev.track.kind === "audio" && audioRef.current) audioRef.current.srcObject = ev.streams[0] || new MediaStream([ev.track]);
           };
           pc.onconnectionstatechange = () => {
             log("pc state:", pc.connectionState);

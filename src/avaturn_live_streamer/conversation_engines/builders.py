@@ -27,8 +27,8 @@ from avaturn_live_streamer.conversation_engines.configs import (
 from avaturn_live_streamer.conversation_engines.realtime_api_client import RealtimeApiClient
 from avaturn_live_streamer.event_bus import EventBus
 
-EngineKind = Literal["openai", "cartesia"]
-ENGINE_KINDS: tuple[EngineKind, ...] = ("openai", "cartesia")
+EngineKind = Literal["openai", "cartesia", "gemini-local"]
+ENGINE_KINDS: tuple[EngineKind, ...] = ("openai", "cartesia", "gemini-local")
 
 type EngineRun = Callable[[EventBus, StreamClocks], Coroutine[None, None, None]]
 type BuiltEngine = tuple[ConversationEngineConfig, EngineRun]
@@ -58,8 +58,21 @@ class CartesiaEngineOptions(BaseModel):
     agent_id: str
 
 
+class GeminiLocalOptions(BaseModel):
+    type: Literal["gemini-local"] = "gemini-local"
+    api_key: str
+    model: str = "gemini-3.8-flash"
+    prompt: str = "Responda em portugues brasileiro em no maximo duas frases curtas, sem markdown."
+    voice_id: str = ""
+    text_provider: Literal["gemini", "openai-compatible"] = "gemini"
+    text_endpoint: str = ""
+    text_api_key: str = ""
+    transcription_provider: Literal["local", "openai"] = "local"
+    transcription_api_key: str = ""
+
+
 EngineOptions = Annotated[
-    OpenAIEngineOptions | CartesiaEngineOptions,
+    OpenAIEngineOptions | CartesiaEngineOptions | GeminiLocalOptions,
     Discriminator("type"),
 ]
 
@@ -146,6 +159,20 @@ async def build_openai(
 
 async def build_engine(options: EngineOptions, *, stream_id: str) -> BuiltEngine:
     match options:
+        case GeminiLocalOptions():
+            from avaturn_live_streamer.conversation_engines.gemini_local import GeminiLocalEngine
+            from avaturn_live_streamer.conversation_engines.configs import GeminiLocalConversationEngineConfig
+            async with httpx.AsyncClient(timeout=5) as client:
+                r = await client.get("http://127.0.0.1:7863/health")
+                r.raise_for_status()
+                if options.text_provider == "gemini":
+                    r = await client.get(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{options.model}",
+                    headers={"x-goog-api-key": options.api_key},
+                    )
+                    if r.is_error:
+                        raise RuntimeError("Gemini: " + r.json().get("error", {}).get("message", str(r.status_code)))
+            return GeminiLocalConversationEngineConfig(), GeminiLocalEngine(options).run
         case OpenAIEngineOptions():
             return await build_openai(stream_id=stream_id, options=options)
         case CartesiaEngineOptions():

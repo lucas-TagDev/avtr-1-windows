@@ -3,6 +3,7 @@
 
 import asyncio
 import math
+import os
 import time
 from asyncio.futures import Future
 from contextlib import aclosing, asynccontextmanager
@@ -81,7 +82,7 @@ _METRIC_TOTAL_CALL_DURATION = _METER.create_histogram(
 # fmt: on
 
 
-_RENDERER_CALL_TIMEOUTS = httpx.Timeout(0.5, connect=0.005)
+_RENDERER_CALL_TIMEOUTS = httpx.Timeout(2.0, connect=2.0) if os.name == "nt" else httpx.Timeout(0.5, connect=0.005)
 _RENDERER_LB_CALL_TIMEOUTS = httpx.Timeout(12.0, connect=0.005)
 _WORKER_ACQUIRE_TIMEOUT = 10
 

@@ -1,0 +1,6 @@
+AVTR-1 para Windows, sem WSL
+
+Guia completo: WINDOWS.md
+Primeiro uso: INSTALAR-WINDOWS.cmd, login Hugging Face e PREPARAR-MODELOS.cmd.
+Uso diario: CONVERSAR-AO-VIVO.cmd -> http://localhost:7860
+Configuracoes e chaves: settings.sqlite3 (local, nao compartilhar).

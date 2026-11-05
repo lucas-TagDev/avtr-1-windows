@@ -31,6 +31,7 @@ requires TRT (run ``scripts/build_avtr1_engines.py`` before first use).
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 import torch
 
@@ -183,12 +184,20 @@ class Pipeline[StateT]:
                 warp_trt, WarpInput, WarpOutput,
                 plugin_files=[str(plugin_path)] if plugin_path.is_file() else [],
             )
+        elif os.name == "nt" and (get_storage_root() / "build_artifacts/warp_cuda_final.engine").is_file():
+            from avtr1_renderer.runtime.windows_warp import CudaWarpEngine
+            warp = CudaWarpEngine(get_storage_root() / "build_artifacts")
         else:
             warp = load_engine(
-                find_engine_or_onnx("warp_network", "warp_network_onnx"),
+                (get_storage_root() / "build_artifacts" / "warp_network_windows.onnx")
+                if os.name == "nt" else find_engine_or_onnx("warp_network", "warp_network_onnx"),
                 WarpInput,
                 WarpOutput,
             )
+
+        if os.name == "nt" and not warp_trt.is_file() and not (get_storage_root() / "build_artifacts/warp_cuda_final.engine").is_file():
+            from avtr1_renderer.models.warp import SerialWarpEngine
+            warp = SerialWarpEngine(warp)
 
         stitch = load_engine(
             find_engine_or_onnx("stitch_network", "stitch_network_onnx"),
@@ -239,18 +248,18 @@ class Pipeline[StateT]:
             encode_engine=encode,
             decode_engine=decode,
             normalizer=normalizer,
+            n_ode_steps=max(1, min(10, int(os.environ.get("AVTR1_ODE_STEPS", "5")))),
         )
-        return (
-            cls(
+        pipeline = cls(
                 motion_generator=motion_generator,
                 stitch=stitch,
                 warp=warp,
                 decoder=decoder,
                 matting=matting,
                 backgrounds=backgrounds,
-            ),
-            registry,
-        )
+            )
+        pipeline.avatar_loader = loader
+        return pipeline, registry
 
     def initial_state(self, avatar: Avatar) -> StateT:
         return self._motion_generator.initial_state(avatar)

@@ -1,0 +1,2 @@
+Guia atualizado: WINDOWS.md
+Iniciador recomendado: CONVERSAR-AO-VIVO.cmd

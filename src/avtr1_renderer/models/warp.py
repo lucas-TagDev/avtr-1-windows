@@ -47,3 +47,28 @@ class WarpOutput:
 
 
 WarpEngine = InferenceEngine[WarpInput, WarpOutput]
+
+
+class SerialWarpEngine:
+    """Run the portable batch-one ONNX warp for each frame on Windows."""
+
+    def __init__(self, engine: WarpEngine):
+        self.engine = engine
+
+    def allocate_outputs(self, shapes=None):
+        return self.engine.allocate_outputs(shapes)
+
+    def __call__(self, inputs: WarpInput, out: WarpOutput | None = None) -> WarpOutput:
+        frames = []
+        for i in range(inputs.feature_3d.shape[0]):
+            result = self.engine(WarpInput(
+                feature_3d=inputs.feature_3d[i:i+1].contiguous(),
+                kp_source=inputs.kp_source[i:i+1].contiguous(),
+                kp_driving=inputs.kp_driving[i:i+1].contiguous(),
+            ))
+            frames.append(result.out)
+        combined = torch.cat(frames, dim=0)
+        if out is not None:
+            out.out.copy_(combined)
+            return out
+        return WarpOutput(out=combined)

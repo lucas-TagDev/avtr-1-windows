@@ -1,0 +1,4 @@
+CONVERSA AO VIVO
+
+Abra CONVERSAR-AO-VIVO.cmd e acesse http://localhost:7860.
+Guia completo, configuracoes, instalacao e problemas comuns: WINDOWS.md.

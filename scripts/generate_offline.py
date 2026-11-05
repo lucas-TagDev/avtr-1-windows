@@ -163,6 +163,7 @@ def main() -> None:
         macro_block_size=1,
         audio_path=str(audio_path) if audio_path is not None else None,
         audio_codec="aac" if audio_path is not None else None,
+        output_params=["-shortest"] if audio_path is not None else [],
     )
     writer.send(None)
 
@@ -192,7 +193,7 @@ def main() -> None:
     finally:
         writer.close()
 
-    print(f"\nDone. {produced} frames ({produced / FPS:.1f}s) → {args.out}")
+    print(f"\nDone. {produced} frames ({produced / FPS:.1f}s) -> {args.out}")
 
 
 if __name__ == "__main__":
