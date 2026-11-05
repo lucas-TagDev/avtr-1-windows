@@ -15,27 +15,41 @@ Não instale WSL. Os scripts usam Python, CUDA e TensorRT nativos do Windows. O 
 
 ## 2. Baixar e instalar
 
-Baixe este repositório pelo botão **Code → Download ZIP** e extraia, ou use `git clone` com a URL deste repositório. Escolha uma pasta local com permissão de escrita, preferencialmente um caminho curto, como `C:\IA\avtr-1-windows`.
+Baixe o [ZIP deste projeto Windows](https://github.com/lucas-TagDev/avtr-1-windows/archive/refs/heads/main.zip) e extraia. Dê dois cliques em **INSTALAR-WINDOWS.cmd**.
 
-Dê dois cliques em **INSTALAR-WINDOWS.cmd**. Aguarde o término. Ele cria:
+Uma janela permite escolher a pasta em **qualquer disco local com espaço e permissão de escrita**, por exemplo `D:\IA` ou `G:\Aplicativos`. O instalador cria as pastas abaixo no destino escolhido e instala as dependências. Ao terminar, abre a pasta da aplicação no Explorador.
 
 ```text
-pasta-escolhida/
-├── avtr-1-windows/          # nome da pasta deste repositório pode variar
-│   ├── .venv/              # renderizador CUDA/TensorRT
-│   └── .venv-streamer/     # interface e WebRTC
-└── OmniVoice/              # criado ao lado do repositório
-    ├── .venv/              # síntese e reconhecimento de voz
-    └── models/OmniVoice/   # baixado na preparação
+D:\IA\                         # exemplo; você escolhe o disco e a pasta
+├── avtr-1-windows/
+│   ├── CONVERSAR-AO-VIVO.cmd
+│   ├── PREPARAR-MODELOS.cmd
+│   ├── .venv/
+│   ├── .venv-streamer/
+│   ├── .cache/               # downloads e arquivos temporários do instalador
+│   └── artifacts/            # modelos preparados depois
+└── OmniVoice/
+    ├── .venv/
+    └── models/OmniVoice/
 ```
 
-Mantenha as pastas juntas. Não copie ambientes `.venv` de outro computador. Não execute o instalador enquanto a aplicação estiver aberta.
+**Use os iniciadores da pasta instalada**, e não os da pasta extraída do ZIP. O instalador copia somente os arquivos do pacote: fotos, vozes, banco de dados, modelos e ambientes pessoais da origem não são copiados. Uma repetição no mesmo destino atualiza os arquivos da aplicação sem apagar esses dados locais. Feche a aplicação antes de reinstalar.
 
-Se ocorrer erro, a janela permanece aberta: corrija a causa indicada e execute novamente. O instalador utiliza os ambientes já existentes. Uma instalação limpa em outra máquina ainda precisa de validação; os testes realizados usam a máquina de desenvolvimento acima.
+Git, Python, o driver NVIDIA e o Visual C++ são pré-requisitos do sistema e podem estar em outro disco. O Windows também pode usar espaço no disco do sistema. O instalador direciona seu cache de pacotes e arquivos temporários ao destino escolhido; os caches de execução ficam dentro da aplicação ou ao lado dela.
+
+Mantenha `avtr-1-windows` e `OmniVoice` juntas e não mova os ambientes depois de criados. Para mudar de disco, reinstale no novo destino e migre os seus dados conforme a seção de configurações.
+
+Se você cancelar a seleção de pasta, a instalação não começa. Se ocorrer erro, a janela permanece aberta: corrija a mensagem e execute novamente. A instalação completa em uma máquina limpa ainda precisa ser validada.
+
+Para escolher o destino pelo terminal, sem a janela de seleção:
+
+```powershell
+.\INSTALAR-WINDOWS.cmd --destination "D:\IA"
+```
 
 ## 3. Entrar no Hugging Face e preparar os modelos
 
-Abra o PowerShell na pasta deste repositório e execute:
+Abra o PowerShell na pasta **instalada** `avtr-1-windows` e execute:
 
 ```powershell
 $env:HF_HOME = "$PWD\.cache\huggingface"

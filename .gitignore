@@ -77,3 +77,6 @@ settings.sqlite3*
 *.ppm
 *.tmp.*
 .tools/
+
+# Installer caches are kept on the selected disk
+.cache/
