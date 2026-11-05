@@ -85,3 +85,6 @@ settings.sqlite3*
 OmniVoice/
 
 models/
+
+# Screenshots explicitly published in the Windows documentation
+!docs/screenshots/*.png

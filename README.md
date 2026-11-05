@@ -21,3 +21,37 @@ Modelos, chaves, banco de configurações, vozes e fotos pessoais não estão in
 
 Os arquivos de licença originais foram preservados: [mapa de licenças](LICENSE.md). Este fork não altera as permissões de uso dos componentes originais.
 
+## Interface
+
+### Configuração do avatar e dos provedores
+
+Escolha o avatar, o fundo, o provedor de texto e as opções de voz e transcrição.
+
+![Tela de configuração do avatar e dos provedores](docs/screenshots/configuracao.png)
+
+### Conversa ao vivo
+
+Avatar em vídeo, painel de diálogos, indicação de atividade e seleção de microfone. O vídeo também pode ser aberto em uma janela separada.
+
+![Conversa ao vivo com avatar, painel de diálogos e controles de microfone](docs/screenshots/conversa-ao-vivo.png)
+
+## Requisitos para Windows
+
+| Item | Requisito / referência |
+| --- | --- |
+| Sistema | Windows 10 ou 11 de 64 bits, arquitetura x64; sem WSL |
+| GPU | NVIDIA com CUDA. Configuração testada: **RTX 4060 Ti com 16 GB de VRAM**; outras placas e quantidades de memória não foram validadas |
+| Driver | Driver NVIDIA com suporte a **CUDA 12.8 ou superior** |
+| Python | **Python 3.12 x64**, com Python Launcher (`py`) |
+| Git | Git para Windows disponível no terminal |
+| Bibliotecas do sistema | Microsoft Visual C++ Redistributable x64 |
+| Armazenamento | Espaço para três ambientes Python, modelos e caches. O instalador mostra o espaço livre e avisa abaixo de 50 GB; esse valor é uma margem de planejamento, não um mínimo medido |
+| Navegador | Chrome ou Edge, com permissão de acesso ao microfone em localhost |
+| Áudio | Microfone e saída de áudio; referência de voz opcional para clonagem |
+| Internet | Necessária para instalar dependências e baixar modelos; também para os provedores de API que você escolher |
+| Modelos | Conta Hugging Face com acesso liberado ao [AVTR-1](https://huggingface.co/avaturn-live/avtr-1) e condições aceitas |
+| Provedor de texto | Sua chave de API, se escolher um serviço externo; ou servidor local compatível, como LM Studio, com modelo carregado |
+
+O instalador verifica os pré-requisitos antes de instalar as dependências. Ele não instala automaticamente Python, Git, driver NVIDIA ou Visual C++. Confira o [passo a passo para Windows](WINDOWS.md) para os links e orientações.
+
+Avatar, OmniVoice e Whisper local compartilham os recursos do computador. O desempenho e a latência dependem da GPU, do modelo e do provedor escolhido; não há garantia de tempo real em outras máquinas. A instalação completa em um Windows limpo ainda precisa de validação.
